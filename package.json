@@ -1,0 +1,20 @@
+{
+  "name": "20260208-stock-app-kiro-cli",
+  "version": "1.0.0",
+  "description": "Strands Agents SDK와 Amazon Bedrock Claude 모델을 사용한 주식 정보 조회 AI Agent입니다.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@types/node": "^25.2.1",
+    "aws-cdk-lib": "^2.237.1",
+    "constructs": "^10.4.5",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3"
+  }
+}

@@ -1,0 +1,9 @@
+strands-agents
+boto3
+yfinance
+python-dotenv
+feedparser
+requests
+streamlit
+plotly
+prophet
