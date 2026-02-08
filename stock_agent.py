@@ -469,6 +469,147 @@ def get_institutional_holders(company_name: str) -> dict:
     }
 
 
+@tool
+def get_macro_indicators() -> dict:
+    """거시경제 지표를 조회합니다. 시장 전반의 상황을 파악하는데 사용합니다.
+
+    Returns:
+        주요 지수, 변동성, 금리, 환율, 원자재 정보
+    """
+    import warnings
+    warnings.filterwarnings('ignore')
+
+    result = {
+        "indices": {},      # 주요 지수
+        "volatility": {},   # 변동성 지표
+        "bonds": {},        # 채권/금리
+        "currencies": {},   # 환율
+        "commodities": {},  # 원자재
+        "market_sentiment": None  # 시장 심리
+    }
+
+    # 주요 지수 티커
+    indices = {
+        "S&P 500": "^GSPC",
+        "NASDAQ": "^IXIC",
+        "Dow Jones": "^DJI",
+        "KOSPI": "^KS11",
+        "KOSDAQ": "^KQ11",
+        "Nikkei 225": "^N225",
+        "Shanghai": "000001.SS"
+    }
+
+    # 주요 지수 조회
+    for name, ticker in indices.items():
+        try:
+            stock = yf.Ticker(ticker)
+            hist = stock.history(period="5d")
+            if not hist.empty and len(hist) >= 2:
+                current = hist['Close'].iloc[-1]
+                prev = hist['Close'].iloc[-2]
+                change_pct = ((current - prev) / prev) * 100 if prev > 0 else 0
+                result["indices"][name] = {
+                    "price": round(current, 2),
+                    "change_percent": round(change_pct, 2)
+                }
+        except Exception:
+            pass
+
+    # VIX (공포지수)
+    try:
+        vix = yf.Ticker("^VIX")
+        vix_hist = vix.history(period="5d")
+        if not vix_hist.empty:
+            current_vix = vix_hist['Close'].iloc[-1]
+            result["volatility"]["VIX"] = {
+                "value": round(current_vix, 2),
+                "interpretation": "극심한 공포" if current_vix > 30 else ("공포" if current_vix > 20 else ("중립" if current_vix > 15 else "안정"))
+            }
+    except Exception:
+        pass
+
+    # 미국 국채 금리
+    bonds = {
+        "US 10Y Treasury": "^TNX",  # 10년물
+        "US 2Y Treasury": "^IRX",   # 2년물 (3개월 단기)
+    }
+
+    for name, ticker in bonds.items():
+        try:
+            bond = yf.Ticker(ticker)
+            bond_hist = bond.history(period="5d")
+            if not bond_hist.empty:
+                current = bond_hist['Close'].iloc[-1]
+                result["bonds"][name] = {
+                    "yield": round(current, 3)
+                }
+        except Exception:
+            pass
+
+    # 환율
+    currencies = {
+        "USD/KRW": "KRW=X",
+        "USD Index (DXY)": "DX-Y.NYB",
+        "EUR/USD": "EURUSD=X",
+        "USD/JPY": "JPY=X"
+    }
+
+    for name, ticker in currencies.items():
+        try:
+            fx = yf.Ticker(ticker)
+            fx_hist = fx.history(period="5d")
+            if not fx_hist.empty and len(fx_hist) >= 2:
+                current = fx_hist['Close'].iloc[-1]
+                prev = fx_hist['Close'].iloc[-2]
+                change_pct = ((current - prev) / prev) * 100 if prev > 0 else 0
+                result["currencies"][name] = {
+                    "rate": round(current, 2),
+                    "change_percent": round(change_pct, 2)
+                }
+        except Exception:
+            pass
+
+    # 원자재
+    commodities = {
+        "Gold": "GC=F",
+        "Crude Oil (WTI)": "CL=F",
+        "Silver": "SI=F",
+        "Natural Gas": "NG=F"
+    }
+
+    for name, ticker in commodities.items():
+        try:
+            comm = yf.Ticker(ticker)
+            comm_hist = comm.history(period="5d")
+            if not comm_hist.empty and len(comm_hist) >= 2:
+                current = comm_hist['Close'].iloc[-1]
+                prev = comm_hist['Close'].iloc[-2]
+                change_pct = ((current - prev) / prev) * 100 if prev > 0 else 0
+                result["commodities"][name] = {
+                    "price": round(current, 2),
+                    "change_percent": round(change_pct, 2)
+                }
+        except Exception:
+            pass
+
+    # 시장 심리 판단 (VIX 기반)
+    vix_data = result["volatility"].get("VIX", {})
+    if vix_data:
+        vix_value = vix_data.get("value", 20)
+        sp500_change = result["indices"].get("S&P 500", {}).get("change_percent", 0)
+
+        if vix_value > 25 and sp500_change < -1:
+            result["market_sentiment"] = "극도의 공포 (매수 기회 가능)"
+        elif vix_value > 20:
+            result["market_sentiment"] = "불안 (신중한 접근 필요)"
+        elif vix_value < 15 and sp500_change > 0:
+            result["market_sentiment"] = "낙관 (과열 주의)"
+        else:
+            result["market_sentiment"] = "중립"
+
+    return result
+
+
 def main():
     """메인 함수 - Agent 초기화 및 대화 루프"""
     

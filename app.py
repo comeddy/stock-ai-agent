@@ -7,7 +7,7 @@ import pandas as pd
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
 import re
-from stock_agent import get_stock_price, analyze_stock_trend, analyze_company_news, get_ticker, get_fundamental_analysis, get_institutional_holders
+from stock_agent import get_stock_price, analyze_stock_trend, analyze_company_news, get_ticker, get_fundamental_analysis, get_institutional_holders, get_macro_indicators
 from strands import Agent
 from strands.models import BedrockModel
 
@@ -38,12 +38,13 @@ if 'system_prompt' not in st.session_state:
 - 사용자: "삼성전자" → company_name="삼성전자" (O)
 - 사용자: "삼성전자" → company_name="Samsung Electronics" (X)
 
-**종합 분석 요청 시 반드시 5가지 도구 모두 사용:**
+**종합 분석 요청 시 반드시 6가지 도구 모두 사용:**
 1. get_stock_price - 현재가 확인
 2. analyze_stock_trend - 기술적 분석
 3. get_fundamental_analysis - 기본적 분석 (밸류에이션, 수익성, 재무건전성, 성장성)
 4. get_institutional_holders - 수급 분석 (기관/외국인 보유현황)
-5. analyze_company_news - 뉴스 감성 분석
+5. get_macro_indicators - 거시경제 지표 (지수, VIX, 금리, 환율, 원자재)
+6. analyze_company_news - 뉴스 감성 분석
 
 **주가 분석 시 매수/매도 신호를 명확히 표시:**
 
@@ -124,6 +125,33 @@ if 'system_prompt' not in st.session_state:
 🏛️ 수급 현황: 기관 보유 {실제 값}%, 내부자 보유 {실제 값}%
    → 해석: 기관 보유 증가 = 긍정 신호
    → 현재 판단: [긍정/중립/부정]
+
+🌍 거시경제 환경:
+
+📊 주요 지수: S&P500 {값}({변동률}%), KOSPI {값}({변동률}%)
+   → 의미: 글로벌 주식시장 전반적 흐름 파악
+   → 해석: 지수 상승 = 위험자산 선호, 지수 하락 = 안전자산 선호
+   → 현재 판단: [상승장/하락장/혼조]
+
+😰 VIX (공포지수): {실제 값}
+   → 의미: 시장 변동성과 투자심리를 측정 (0-40+ 범위)
+   → 해석: 15 이하=안정, 15-20=중립, 20-30=공포, 30+=극심한 공포
+   → 현재 판단: [안정/중립/공포/극심한 공포]
+
+🏦 미국 국채 금리: 10Y {값}%
+   → 의미: 무위험 수익률 기준, 금리 상승시 주식 매력도 하락
+   → 해석: 금리 급등 = 주식 약세, 금리 하락 = 주식 강세
+   → 현재 판단: [주식 우호적/중립/주식 비우호적]
+
+💱 환율: USD/KRW {값}원
+   → 의미: 원화 가치, 수출기업/수입기업 영향
+   → 해석: 원화 약세 = 수출기업 긍정, 원화 강세 = 수입기업 긍정
+   → 현재 판단: [원화 강세/중립/원화 약세]
+
+🛢️ 원자재: 금 ${값}, 유가 ${값}
+   → 의미: 인플레이션 및 경기 전망 지표
+   → 해석: 금 상승 = 안전자산 선호, 유가 상승 = 인플레 우려
+   → 현재 판단: [위험선호/안전선호/중립]
 
 ✅ 긍정 요인:
 - [기술적 분석 + 기본적 분석 기반 구체적 이유]
@@ -271,7 +299,7 @@ if (analyze_button or st.session_state.get('auto_analyze')) and user_input:
             
             if not df.empty:
                 # 탭 생성
-                tab1, tab2, tab3, tab4, tab5 = st.tabs(["📈 차트", "🔮 예측", "📊 기술적 분석", "💰 펀더멘털", "📰 뉴스"])
+                tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["📈 차트", "🔮 예측", "📊 기술적 분석", "💰 펀더멘털", "🌍 거시경제", "📰 뉴스"])
                 
                 with tab1:
                     # 주가 차트 (Toss 스타일)
@@ -359,6 +387,8 @@ if (analyze_button or st.session_state.get('auto_analyze')) and user_input:
                                 # 기본적 분석 데이터 수집
                                 fundamental = get_fundamental_analysis(company_name)
                                 holders = get_institutional_holders(company_name)
+                                # 거시경제 데이터 수집
+                                macro = get_macro_indicators()
 
                                 current_price = float(price_info.get('current_price', 0))
 
@@ -403,6 +433,16 @@ if (analyze_button or st.session_state.get('auto_analyze')) and user_input:
 - 기관 보유비율: {holders.get('institutional_percent') if 'error' not in holders else 'N/A'}%
 - 내부자 보유비율: {holders.get('insider_percent') if 'error' not in holders else 'N/A'}%
 
+**거시경제 환경:**
+- 시장 심리: {macro.get('market_sentiment', 'N/A')}
+- S&P 500: {macro.get('indices', {}).get('S&P 500', {}).get('price', 'N/A')} ({macro.get('indices', {}).get('S&P 500', {}).get('change_percent', 0):+.2f}%)
+- KOSPI: {macro.get('indices', {}).get('KOSPI', {}).get('price', 'N/A')} ({macro.get('indices', {}).get('KOSPI', {}).get('change_percent', 0):+.2f}%)
+- VIX (공포지수): {macro.get('volatility', {}).get('VIX', {}).get('value', 'N/A')} ({macro.get('volatility', {}).get('VIX', {}).get('interpretation', 'N/A')})
+- 미국 10년물 금리: {macro.get('bonds', {}).get('US 10Y Treasury', {}).get('yield', 'N/A')}%
+- USD/KRW 환율: {macro.get('currencies', {}).get('USD/KRW', {}).get('rate', 'N/A')}원
+- 금 가격: ${macro.get('commodities', {}).get('Gold', {}).get('price', 'N/A')}
+- 유가 (WTI): ${macro.get('commodities', {}).get('Crude Oil (WTI)', {}).get('price', 'N/A')}
+
 **최근 뉴스:**
 {chr(10).join([f"- {item['title']}" for item in news.get('news', [])[:3]])}
 
@@ -421,8 +461,8 @@ if (analyze_button or st.session_state.get('auto_analyze')) and user_input:
 📊 예측 근거:
 - [기술적 분석 근거]
 - [펀더멘털 분석 근거]
+- [거시경제 환경 영향]
 - [뉴스 영향]
-- [시장 상황]
 
 신뢰도: [상/중/하]
 ⚠️ 리스크: [주요 위험 요인]
@@ -693,9 +733,88 @@ if (analyze_button or st.session_state.get('auto_analyze')) and user_input:
                         st.warning("펀더멘털 데이터를 조회할 수 없습니다.")
 
                 with tab5:
+                    # 거시경제 지표
+                    st.subheader("🌍 거시경제 지표")
+
+                    with st.spinner("거시경제 데이터 조회 중..."):
+                        macro = get_macro_indicators()
+
+                    # 시장 심리 배너
+                    sentiment = macro.get("market_sentiment", "중립")
+                    if "공포" in sentiment:
+                        st.error(f"📉 시장 심리: {sentiment}")
+                    elif "낙관" in sentiment:
+                        st.success(f"📈 시장 심리: {sentiment}")
+                    else:
+                        st.info(f"➡️ 시장 심리: {sentiment}")
+
+                    st.divider()
+
+                    # 주요 지수
+                    st.markdown("#### 📊 주요 지수")
+                    indices = macro.get("indices", {})
+                    if indices:
+                        cols = st.columns(4)
+                        for i, (name, data) in enumerate(indices.items()):
+                            with cols[i % 4]:
+                                change = data.get("change_percent", 0)
+                                st.metric(
+                                    name,
+                                    f"{data.get('price', 0):,.2f}",
+                                    f"{change:+.2f}%"
+                                )
+
+                    st.divider()
+
+                    col1, col2 = st.columns(2)
+
+                    with col1:
+                        # VIX (공포지수)
+                        st.markdown("#### 😰 VIX (공포지수)")
+                        vix_data = macro.get("volatility", {}).get("VIX", {})
+                        if vix_data:
+                            vix_value = vix_data.get("value", 0)
+                            interpretation = vix_data.get("interpretation", "N/A")
+                            st.metric("VIX", f"{vix_value:.2f}", interpretation)
+
+                            # VIX 게이지
+                            vix_normalized = min(vix_value / 40 * 100, 100)
+                            st.progress(vix_normalized / 100)
+                            st.caption("0-15: 안정 | 15-20: 중립 | 20-30: 공포 | 30+: 극심한 공포")
+
+                        # 채권/금리
+                        st.markdown("#### 🏦 미국 국채 금리")
+                        bonds = macro.get("bonds", {})
+                        for name, data in bonds.items():
+                            st.metric(name, f"{data.get('yield', 0):.3f}%")
+
+                    with col2:
+                        # 환율
+                        st.markdown("#### 💱 환율")
+                        currencies = macro.get("currencies", {})
+                        for name, data in currencies.items():
+                            change = data.get("change_percent", 0)
+                            st.metric(
+                                name,
+                                f"{data.get('rate', 0):,.2f}",
+                                f"{change:+.2f}%"
+                            )
+
+                        # 원자재
+                        st.markdown("#### 🛢️ 원자재")
+                        commodities = macro.get("commodities", {})
+                        for name, data in commodities.items():
+                            change = data.get("change_percent", 0)
+                            st.metric(
+                                name,
+                                f"${data.get('price', 0):,.2f}",
+                                f"{change:+.2f}%"
+                            )
+
+                with tab6:
                     # 뉴스 분석
                     news = analyze_company_news(company_name)
-                    
+
                     if "error" not in news and news.get('news'):
                         st.subheader(f"📰 최근 뉴스 ({news['news_count']}건)")
                         for item in news['news']:
@@ -714,7 +833,7 @@ if (analyze_button or st.session_state.get('auto_analyze')) and user_input:
             # 매번 새로운 Agent 인스턴스 생성
             agent = Agent(
                 model=st.session_state.bedrock_model,
-                tools=[get_stock_price, analyze_stock_trend, get_fundamental_analysis, get_institutional_holders, analyze_company_news],
+                tools=[get_stock_price, analyze_stock_trend, get_fundamental_analysis, get_institutional_holders, get_macro_indicators, analyze_company_news],
                 system_prompt=st.session_state.system_prompt
             )
             
