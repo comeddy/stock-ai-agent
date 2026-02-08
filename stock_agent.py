@@ -318,6 +318,157 @@ def get_stock_price(company_name: str) -> dict:
     }
 
 
+@tool
+def get_fundamental_analysis(company_name: str) -> dict:
+    """기업의 기본적 분석(펀더멘털) 데이터를 조회합니다.
+
+    Args:
+        company_name: 회사명을 정확히 입력하세요.
+                     예시: "삼성전자", "Amazon", "Apple"
+                     주의: 영어로 번역하지 말고 사용자가 입력한 그대로 전달하세요.
+
+    Returns:
+        밸류에이션, 수익성, 재무건전성, 성장성 지표
+    """
+    ticker = get_ticker(company_name)
+
+    try:
+        stock = yf.Ticker(ticker)
+        info = stock.info
+    except Exception as e:
+        return {"error": f"데이터 조회 실패: {str(e)}"}
+
+    if not info:
+        return {"error": f"{company_name}의 재무 정보를 찾을 수 없습니다."}
+
+    # 안전하게 값 가져오기 (None 처리)
+    def safe_get(key, multiplier=1, decimal=2):
+        value = info.get(key)
+        if value is not None:
+            return round(value * multiplier, decimal)
+        return None
+
+    # 밸류에이션 지표
+    valuation = {
+        "pe_ratio": safe_get('trailingPE'),  # P/E (주가수익비율)
+        "forward_pe": safe_get('forwardPE'),  # 예상 P/E
+        "pb_ratio": safe_get('priceToBook'),  # P/B (주가순자산비율)
+        "peg_ratio": safe_get('pegRatio'),  # PEG (주가수익성장비율)
+        "ps_ratio": safe_get('priceToSalesTrailing12Months'),  # PSR (주가매출비율)
+    }
+
+    # 수익성 지표
+    profitability = {
+        "roe": safe_get('returnOnEquity', 100),  # ROE (자기자본이익률) %
+        "roa": safe_get('returnOnAssets', 100),  # ROA (총자산이익률) %
+        "operating_margin": safe_get('operatingMargins', 100),  # 영업이익률 %
+        "profit_margin": safe_get('profitMargins', 100),  # 순이익률 %
+        "gross_margin": safe_get('grossMargins', 100),  # 매출총이익률 %
+    }
+
+    # 재무건전성 지표
+    financial_health = {
+        "debt_to_equity": safe_get('debtToEquity'),  # 부채비율
+        "current_ratio": safe_get('currentRatio'),  # 유동비율
+        "quick_ratio": safe_get('quickRatio'),  # 당좌비율
+    }
+
+    # 성장성 지표
+    growth = {
+        "revenue_growth": safe_get('revenueGrowth', 100),  # 매출 성장률 %
+        "earnings_growth": safe_get('earningsGrowth', 100),  # 이익 성장률 %
+    }
+
+    # 기타 정보
+    other = {
+        "market_cap": info.get('marketCap'),  # 시가총액
+        "enterprise_value": info.get('enterpriseValue'),  # 기업가치
+        "dividend_yield": safe_get('dividendYield', 100),  # 배당수익률 %
+        "dividend_rate": info.get('dividendRate'),  # 배당금
+        "beta": safe_get('beta'),  # 베타 (시장 대비 변동성)
+        "fifty_two_week_high": safe_get('fiftyTwoWeekHigh'),  # 52주 최고가
+        "fifty_two_week_low": safe_get('fiftyTwoWeekLow'),  # 52주 최저가
+        "eps": safe_get('trailingEps'),  # 주당순이익
+        "book_value": safe_get('bookValue'),  # 주당순자산
+    }
+
+    return {
+        "company": company_name,
+        "ticker": ticker,
+        "valuation": valuation,
+        "profitability": profitability,
+        "financial_health": financial_health,
+        "growth": growth,
+        "other": other
+    }
+
+
+@tool
+def get_institutional_holders(company_name: str) -> dict:
+    """기관 및 주요 투자자 보유 현황을 조회합니다.
+
+    Args:
+        company_name: 회사명을 정확히 입력하세요.
+                     예시: "삼성전자", "Amazon", "Apple"
+                     주의: 영어로 번역하지 말고 사용자가 입력한 그대로 전달하세요.
+
+    Returns:
+        기관투자자 보유비율, 주요 주주 목록
+    """
+    ticker = get_ticker(company_name)
+
+    try:
+        stock = yf.Ticker(ticker)
+        info = stock.info
+    except Exception as e:
+        return {"error": f"데이터 조회 실패: {str(e)}"}
+
+    # 기관/내부자 보유비율
+    institutional_percent = info.get('heldPercentInstitutions')
+    insider_percent = info.get('heldPercentInsiders')
+
+    # 주요 기관투자자 목록
+    top_institutions = []
+    try:
+        holders = stock.institutional_holders
+        if holders is not None and not holders.empty:
+            for _, row in holders.head(5).iterrows():
+                top_institutions.append({
+                    "holder": row.get('Holder', 'N/A'),
+                    "shares": int(row.get('Shares', 0)) if pd.notna(row.get('Shares')) else 0,
+                    "value": int(row.get('Value', 0)) if pd.notna(row.get('Value')) else 0,
+                    "percent": round(row.get('pctHeld', 0) * 100, 2) if pd.notna(row.get('pctHeld')) else None
+                })
+    except Exception:
+        pass  # 기관투자자 데이터가 없는 경우
+
+    # 주요 펀드 보유 목록
+    top_funds = []
+    try:
+        funds = stock.mutualfund_holders
+        if funds is not None and not funds.empty:
+            for _, row in funds.head(5).iterrows():
+                top_funds.append({
+                    "holder": row.get('Holder', 'N/A'),
+                    "shares": int(row.get('Shares', 0)) if pd.notna(row.get('Shares')) else 0,
+                    "value": int(row.get('Value', 0)) if pd.notna(row.get('Value')) else 0,
+                    "percent": round(row.get('pctHeld', 0) * 100, 2) if pd.notna(row.get('pctHeld')) else None
+                })
+    except Exception:
+        pass  # 펀드 데이터가 없는 경우
+
+    return {
+        "company": company_name,
+        "ticker": ticker,
+        "institutional_percent": round(institutional_percent * 100, 2) if institutional_percent else None,
+        "insider_percent": round(insider_percent * 100, 2) if insider_percent else None,
+        "top_institutions": top_institutions,
+        "top_funds": top_funds,
+        "float_shares": info.get('floatShares'),  # 유통주식수
+        "shares_outstanding": info.get('sharesOutstanding'),  # 발행주식수
+    }
+
+
 def main():
     """메인 함수 - Agent 초기화 및 대화 루프"""
     

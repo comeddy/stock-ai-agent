@@ -7,7 +7,7 @@ import pandas as pd
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
 import re
-from stock_agent import get_stock_price, analyze_stock_trend, analyze_company_news, get_ticker
+from stock_agent import get_stock_price, analyze_stock_trend, analyze_company_news, get_ticker, get_fundamental_analysis, get_institutional_holders
 from strands import Agent
 from strands.models import BedrockModel
 
@@ -38,10 +38,12 @@ if 'system_prompt' not in st.session_state:
 - 사용자: "삼성전자" → company_name="삼성전자" (O)
 - 사용자: "삼성전자" → company_name="Samsung Electronics" (X)
 
-**종합 분석 요청 시 반드시 3가지 도구 모두 사용:**
+**종합 분석 요청 시 반드시 5가지 도구 모두 사용:**
 1. get_stock_price - 현재가 확인
 2. analyze_stock_trend - 기술적 분석
-3. analyze_company_news - 뉴스 감성 분석
+3. get_fundamental_analysis - 기본적 분석 (밸류에이션, 수익성, 재무건전성, 성장성)
+4. get_institutional_holders - 수급 분석 (기관/외국인 보유현황)
+5. analyze_company_news - 뉴스 감성 분석
 
 **주가 분석 시 매수/매도 신호를 명확히 표시:**
 
@@ -67,21 +69,70 @@ if 'system_prompt' not in st.session_state:
 - 볼린저밴드 중간 (40-60%)
 - 혼조된 신호들
 
-**분석 결과 형식:**
+**분석 결과 형식 (반드시 실제 데이터 값을 포함하세요):**
 ```
 📊 종합 판단: [매수 고려 / 매도 고려 / 관망 추천]
 
-긍정 요인:
-- [구체적 이유]
+💰 현재 주가 정보:
+- 현재가: {실제 current_price 값}
+- 전일 대비: {실제 change_percent 값}%
 
-부정 요인:
-- [구체적 이유]
+📈 기술적 분석 근거:
+
+🎯 RSI (상대강도지수): {실제 rsi 값}
+   → 의미: 0~100 사이 값으로 주가의 과열/침체 정도를 측정
+   → 해석: 30 이하=과매도(반등 기대), 70 이상=과매수(조정 주의), 30~70=중립
+   → 현재 판단: [과매수/과매도/중립]
+
+📊 이동평균선: 현재가 vs MA5({값}), MA20({값}), MA60({값})
+   → 의미: 일정 기간 평균 주가로 추세 방향 파악
+   → 해석: 현재가 > 이동평균 = 상승추세, 현재가 < 이동평균 = 하락추세
+   → 현재 판단: [상승/하락 추세]
+
+📉 MACD: {실제 macd 값} vs Signal {실제 signal 값}
+   → 의미: 단기/장기 이동평균 차이로 추세 전환점 포착
+   → 해석: MACD > Signal = 상승 모멘텀, MACD < Signal = 하락 모멘텀
+   → 현재 판단: [상승/하락 모멘텀]
+
+📏 볼린저밴드: {실제 bb_position 값}%
+   → 의미: 주가 변동 범위를 나타내며 0%=하단, 100%=상단
+   → 해석: 20% 이하=저평가 구간, 80% 이상=고평가 구간
+   → 현재 판단: [저평가/적정/고평가 구간]
+
+⚡ 크로스 신호: {골든크로스/데드크로스/없음}
+   → 의미: 단기 이동평균이 장기 이동평균을 교차하는 시점
+   → 해석: 골든크로스=매수신호(상승전환), 데드크로스=매도신호(하락전환)
+
+💰 기본적 분석 근거:
+
+📊 밸류에이션: P/E {실제 값}, P/B {실제 값}
+   → 해석: P/E < 15 저평가, 15-25 적정, > 25 고평가
+   → 현재 판단: [저평가/적정/고평가]
+
+📈 수익성: ROE {실제 값}%, 영업이익률 {실제 값}%
+   → 해석: ROE > 15% 우수, 10-15% 양호, < 10% 개선 필요
+   → 현재 판단: [우수/양호/개선필요]
+
+🏦 재무건전성: 부채비율 {실제 값}%, 유동비율 {실제 값}
+   → 해석: 부채비율 < 100% 안정, 유동비율 > 1.5 양호
+   → 현재 판단: [안정/보통/위험]
+
+🚀 성장성: 매출성장률 {실제 값}%, 이익성장률 {실제 값}%
+   → 해석: 성장률 > 20% 고성장, 0-20% 성장, < 0% 역성장
+   → 현재 판단: [고성장/성장/역성장]
+
+🏛️ 수급 현황: 기관 보유 {실제 값}%, 내부자 보유 {실제 값}%
+   → 해석: 기관 보유 증가 = 긍정 신호
+   → 현재 판단: [긍정/중립/부정]
+
+✅ 긍정 요인:
+- [기술적 분석 + 기본적 분석 기반 구체적 이유]
+
+❌ 부정 요인:
+- [기술적 분석 + 기본적 분석 기반 구체적 이유]
 
 📰 뉴스 분석:
-- [최근 뉴스 제목과 긍정/부정 판단]
-- 뉴스 제목을 보고 회사에 긍정적인지 부정적인지 판단하세요
-- 긍정 키워드: 실적 개선, 신제품, 투자 확대, 수주, 협력
-- 부정 키워드: 실적 악화, 리콜, 소송, 감원, 적자
+- [실제 뉴스 제목] → [긍정/부정 판단 및 이유]
 
 ⚠️ 투자 판단은 본인의 책임이며, 이 분석은 참고용입니다.
 ```
@@ -220,7 +271,7 @@ if (analyze_button or st.session_state.get('auto_analyze')) and user_input:
             
             if not df.empty:
                 # 탭 생성
-                tab1, tab2, tab3, tab4 = st.tabs(["📈 차트", "🔮 예측", "📊 기술적 분석", "📰 뉴스"])
+                tab1, tab2, tab3, tab4, tab5 = st.tabs(["📈 차트", "🔮 예측", "📊 기술적 분석", "💰 펀더멘털", "📰 뉴스"])
                 
                 with tab1:
                     # 주가 차트 (Toss 스타일)
@@ -305,9 +356,18 @@ if (analyze_button or st.session_state.get('auto_analyze')) and user_input:
                                 analysis = analyze_stock_trend(company_name, period)
                                 news = analyze_company_news(company_name)
                                 price_info = get_stock_price(company_name)
-                                
+                                # 기본적 분석 데이터 수집
+                                fundamental = get_fundamental_analysis(company_name)
+                                holders = get_institutional_holders(company_name)
+
                                 current_price = float(price_info.get('current_price', 0))
-                                
+
+                                # 펀더멘털 데이터 추출
+                                val = fundamental.get('valuation', {}) if 'error' not in fundamental else {}
+                                prof = fundamental.get('profitability', {}) if 'error' not in fundamental else {}
+                                health = fundamental.get('financial_health', {}) if 'error' not in fundamental else {}
+                                growth = fundamental.get('growth', {}) if 'error' not in fundamental else {}
+
                                 # AI 예측 프롬프트
                                 forecast_agent = Agent(
                                     model=st.session_state.bedrock_model,
@@ -330,13 +390,26 @@ if (analyze_button or st.session_state.get('auto_analyze')) and user_input:
 - 변동성: {analysis.get('volatility')}%
 - 거래량 비율: {analysis.get('volume_ratio')}%
 
+**기본적 분석 (펀더멘털):**
+- P/E (주가수익비율): {val.get('pe_ratio')}
+- P/B (주가순자산비율): {val.get('pb_ratio')}
+- ROE (자기자본이익률): {prof.get('roe')}%
+- 영업이익률: {prof.get('operating_margin')}%
+- 부채비율: {health.get('debt_to_equity')}%
+- 매출 성장률: {growth.get('revenue_growth')}%
+- 이익 성장률: {growth.get('earnings_growth')}%
+
+**수급 현황:**
+- 기관 보유비율: {holders.get('institutional_percent') if 'error' not in holders else 'N/A'}%
+- 내부자 보유비율: {holders.get('insider_percent') if 'error' not in holders else 'N/A'}%
+
 **최근 뉴스:**
 {chr(10).join([f"- {item['title']}" for item in news.get('news', [])[:3]])}
 
 **예측 요구사항:**
 1. {forecast_period} 후 예상 주가를 **반드시 숫자로만** 출력 (예: 160000)
 2. 상승/하락/보합 중 하나 선택
-3. 예측 근거 (기술적 지표 + 뉴스 + 시장 상황)
+3. 예측 근거 (기술적 지표 + 펀더멘털 + 뉴스 + 시장 상황)
 4. 신뢰도 (상/중/하)
 5. 주요 리스크 요인
 
@@ -347,6 +420,7 @@ if (analyze_button or st.session_state.get('auto_analyze')) and user_input:
 
 📊 예측 근거:
 - [기술적 분석 근거]
+- [펀더멘털 분석 근거]
 - [뉴스 영향]
 - [시장 상황]
 
@@ -507,8 +581,118 @@ if (analyze_button or st.session_state.get('auto_analyze')) and user_input:
                                     st.error(f"🔴 {signal} - 매도 신호")
                     else:
                         st.error(analysis['error'])
-                
+
                 with tab4:
+                    # 펀더멘털 분석 (기본적 분석)
+                    st.subheader("💰 펀더멘털 분석")
+
+                    # 데이터 조회
+                    fundamental = get_fundamental_analysis(company_name)
+                    holders = get_institutional_holders(company_name)
+
+                    if "error" not in fundamental:
+                        # 밸류에이션
+                        st.markdown("#### 📊 밸류에이션")
+                        val = fundamental['valuation']
+                        col1, col2, col3, col4 = st.columns(4)
+                        with col1:
+                            pe = val.get('pe_ratio')
+                            pe_status = "저평가" if pe and pe < 15 else ("고평가" if pe and pe > 25 else "적정")
+                            st.metric("P/E (주가수익비율)", f"{pe:.1f}" if pe else "N/A", pe_status if pe else None)
+                        with col2:
+                            pb = val.get('pb_ratio')
+                            pb_status = "저평가" if pb and pb < 1 else ("고평가" if pb and pb > 3 else "적정")
+                            st.metric("P/B (주가순자산비율)", f"{pb:.2f}" if pb else "N/A", pb_status if pb else None)
+                        with col3:
+                            peg = val.get('peg_ratio')
+                            peg_status = "저평가" if peg and peg < 1 else ("고평가" if peg and peg > 2 else "적정")
+                            st.metric("PEG", f"{peg:.2f}" if peg else "N/A", peg_status if peg else None)
+                        with col4:
+                            ps = val.get('ps_ratio')
+                            st.metric("PSR (주가매출비율)", f"{ps:.2f}" if ps else "N/A")
+
+                        st.divider()
+
+                        # 수익성
+                        st.markdown("#### 📈 수익성")
+                        prof = fundamental['profitability']
+                        col1, col2, col3, col4 = st.columns(4)
+                        with col1:
+                            roe = prof.get('roe')
+                            roe_status = "우수" if roe and roe > 15 else ("양호" if roe and roe > 10 else "개선필요")
+                            st.metric("ROE (자기자본이익률)", f"{roe:.1f}%" if roe else "N/A", roe_status if roe else None)
+                        with col2:
+                            roa = prof.get('roa')
+                            st.metric("ROA (총자산이익률)", f"{roa:.1f}%" if roa else "N/A")
+                        with col3:
+                            op_margin = prof.get('operating_margin')
+                            st.metric("영업이익률", f"{op_margin:.1f}%" if op_margin else "N/A")
+                        with col4:
+                            net_margin = prof.get('profit_margin')
+                            st.metric("순이익률", f"{net_margin:.1f}%" if net_margin else "N/A")
+
+                        st.divider()
+
+                        # 재무건전성
+                        st.markdown("#### 🏦 재무건전성")
+                        health = fundamental['financial_health']
+                        col1, col2, col3 = st.columns(3)
+                        with col1:
+                            debt = health.get('debt_to_equity')
+                            debt_status = "안정" if debt and debt < 100 else ("주의" if debt and debt < 200 else "위험")
+                            st.metric("부채비율", f"{debt:.1f}%" if debt else "N/A", debt_status if debt else None)
+                        with col2:
+                            current = health.get('current_ratio')
+                            current_status = "양호" if current and current > 1.5 else ("보통" if current and current > 1 else "주의")
+                            st.metric("유동비율", f"{current:.2f}" if current else "N/A", current_status if current else None)
+                        with col3:
+                            quick = health.get('quick_ratio')
+                            st.metric("당좌비율", f"{quick:.2f}" if quick else "N/A")
+
+                        st.divider()
+
+                        # 성장성
+                        st.markdown("#### 🚀 성장성")
+                        growth = fundamental['growth']
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            rev_growth = growth.get('revenue_growth')
+                            growth_status = "고성장" if rev_growth and rev_growth > 20 else ("성장" if rev_growth and rev_growth > 0 else "역성장")
+                            st.metric("매출 성장률", f"{rev_growth:.1f}%" if rev_growth else "N/A", growth_status if rev_growth else None)
+                        with col2:
+                            earn_growth = growth.get('earnings_growth')
+                            st.metric("이익 성장률", f"{earn_growth:.1f}%" if earn_growth else "N/A")
+
+                        st.divider()
+
+                        # 기관/외국인 보유 현황
+                        st.markdown("#### 🏛️ 기관/외국인 보유 현황")
+                        if "error" not in holders:
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                inst = holders.get('institutional_percent')
+                                st.metric("기관 보유비율", f"{inst:.1f}%" if inst else "N/A")
+                            with col2:
+                                insider = holders.get('insider_percent')
+                                st.metric("내부자 보유비율", f"{insider:.1f}%" if insider else "N/A")
+
+                            # 주요 기관투자자 목록
+                            if holders.get('top_institutions'):
+                                st.markdown("**주요 기관투자자**")
+                                inst_data = []
+                                for inst in holders['top_institutions'][:5]:
+                                    inst_data.append({
+                                        "기관명": inst['holder'],
+                                        "보유비율": f"{inst['percent']:.2f}%" if inst['percent'] else "N/A"
+                                    })
+                                if inst_data:
+                                    st.dataframe(pd.DataFrame(inst_data), hide_index=True, use_container_width=True)
+                        else:
+                            st.info("기관 보유 데이터를 조회할 수 없습니다.")
+                    else:
+                        st.warning("펀더멘털 데이터를 조회할 수 없습니다.")
+
+                with tab5:
                     # 뉴스 분석
                     news = analyze_company_news(company_name)
                     
@@ -530,7 +714,7 @@ if (analyze_button or st.session_state.get('auto_analyze')) and user_input:
             # 매번 새로운 Agent 인스턴스 생성
             agent = Agent(
                 model=st.session_state.bedrock_model,
-                tools=[get_stock_price, analyze_stock_trend, analyze_company_news],
+                tools=[get_stock_price, analyze_stock_trend, get_fundamental_analysis, get_institutional_holders, analyze_company_news],
                 system_prompt=st.session_state.system_prompt
             )
             
