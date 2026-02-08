@@ -33,6 +33,9 @@ export class StockAppStack extends cdk.Stack {
     });
     ec2Sg.addIngressRule(albSg, ec2.Port.tcp(8501), 'Allow Streamlit from ALB');
 
+    // S3 bucket name (parameterized)
+    const deployBucket = process.env.DEPLOY_BUCKET || 'stock-ai-agent-deploy-1770486416';
+
     // IAM Role for EC2
     const ec2Role = new iam.Role(this, 'Ec2Role', {
       assumedBy: new iam.ServicePrincipal('ec2.amazonaws.com'),
@@ -41,11 +44,11 @@ export class StockAppStack extends cdk.Stack {
         iam.ManagedPolicy.fromAwsManagedPolicyName('AmazonBedrockFullAccess'),
       ],
     });
-    
+
     // S3 access for deployment
     ec2Role.addToPolicy(new iam.PolicyStatement({
       actions: ['s3:GetObject'],
-      resources: ['arn:aws:s3:::stock-ai-agent-deploy-1770486416/*'],
+      resources: [`arn:aws:s3:::${deployBucket}/*`],
     }));
 
     // User Data for EC2
@@ -54,12 +57,14 @@ export class StockAppStack extends cdk.Stack {
       'yum update -y',
       'yum install -y python3.11 python3.11-pip unzip',
       'cd /home/ec2-user',
-      'aws s3 cp s3://stock-ai-agent-deploy-1770486416/stock-app.zip .',
+      `aws s3 cp s3://${deployBucket}/stock-app.zip .`,
       'unzip -q stock-app.zip',
       'python3.11 -m venv venv',
-      'source venv/bin/activate',
-      'pip install -r requirements.txt',
-      'nohup streamlit run app.py --server.port 8501 --server.address 0.0.0.0 > /var/log/streamlit.log 2>&1 &'
+      // Run in same shell to preserve venv activation
+      'cd /home/ec2-user && source venv/bin/activate && pip install -r requirements.txt',
+      'cd /home/ec2-user && source venv/bin/activate && nohup streamlit run app.py --server.port 8501 --server.address 0.0.0.0 > /var/log/streamlit.log 2>&1 &',
+      // Wait for Streamlit to start
+      'sleep 10'
     );
 
     // EC2 Instance

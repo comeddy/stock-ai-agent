@@ -203,9 +203,15 @@ if (analyze_button or st.session_state.get('auto_analyze')) and user_input:
         try:
             # 자동 분석 플래그 설정
             st.session_state.auto_analyze = True
-            
-            # 회사명 추출
-            company_name = user_input.split()[0]
+
+            # 회사명 추출 (키워드 제거)
+            keywords = ['주가', '분석', '매수', '매도', '타이밍', '예측', '전망', '추천']
+            company_name = user_input
+            for keyword in keywords:
+                company_name = company_name.replace(keyword, '').strip()
+            # 빈 문자열이면 원본 사용
+            if not company_name:
+                company_name = user_input.split()[0]
             ticker = get_ticker(company_name)
             
             # 주가 데이터 조회

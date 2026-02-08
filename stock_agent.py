@@ -13,7 +13,6 @@ import os
 import yfinance as yf
 import pandas as pd
 import feedparser
-import requests
 from datetime import datetime, timedelta
 from strands import Agent, tool
 from strands.models import BedrockModel
@@ -61,7 +60,6 @@ def get_ticker(company_name: str) -> str:
     """
     # 공백 제거
     cleaned_name = company_name.replace(" ", "")
-    # 영문은 소문자로, 한글은 그대로
     # 영문은 소문자로, 한글은 그대로
     search_key = cleaned_name.lower() if cleaned_name.isascii() else cleaned_name
     # 티커 매핑에서 검색
@@ -139,8 +137,9 @@ def analyze_stock_trend(company_name: str, period: str = "3mo") -> dict:
     recent_volume = df['Volume'].iloc[-1]
     volume_ratio = (recent_volume / avg_volume) * 100 if avg_volume > 0 else 0
     
-    # 기간 수익률 (시작가 대비 현재가)
-    period_return = ((current_price - df['Close'].iloc[0]) / df['Close'].iloc[0]) * 100
+    # 기간 수익률 (시작가 대비 현재가) - ZeroDivision 방지
+    start_price = df['Close'].iloc[0]
+    period_return = ((current_price - start_price) / start_price) * 100 if start_price > 0 else 0
     
     # MACD (Moving Average Convergence Divergence) - 추세 전환 신호
     exp12 = df['Close'].ewm(span=12, adjust=False).mean()  # 12일 지수이동평균
@@ -155,9 +154,10 @@ def analyze_stock_trend(company_name: str, period: str = "3mo") -> dict:
     bb_upper = bb_middle + (bb_std * 2)  # 상단 밴드
     bb_lower = bb_middle - (bb_std * 2)  # 하단 밴드
     
-    # 현재가의 볼린저 밴드 위치 (%) - 0%=하단, 100%=상단
+    # 현재가의 볼린저 밴드 위치 (%) - 0%=하단, 100%=상단 - ZeroDivision 방지
     if len(df) >= 20:
-        bb_position = ((current_price - bb_lower.iloc[-1]) / (bb_upper.iloc[-1] - bb_lower.iloc[-1])) * 100
+        bb_width = bb_upper.iloc[-1] - bb_lower.iloc[-1]
+        bb_position = ((current_price - bb_lower.iloc[-1]) / bb_width) * 100 if bb_width > 0 else 50
     else:
         bb_position = None
     
