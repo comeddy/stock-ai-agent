@@ -6,6 +6,7 @@ import * as cloudfront from 'aws-cdk-lib/aws-cloudfront';
 import * as origins from 'aws-cdk-lib/aws-cloudfront-origins';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
+import * as s3 from 'aws-cdk-lib/aws-s3';
 import { Construct } from 'constructs';
 
 export class StockAppStack extends cdk.Stack {
@@ -16,6 +17,29 @@ export class StockAppStack extends cdk.Stack {
     const vpc = new ec2.Vpc(this, 'StockAppVpc', {
       maxAzs: 2,
       natGateways: 1,
+    });
+
+    // ==========================================================================
+    // 로깅: ALB 및 CloudFront 액세스 로그용 S3 버킷
+    // ==========================================================================
+    const logBucket = new s3.Bucket(this, 'AccessLogBucket', {
+      bucketName: `stock-app-logs-${cdk.Aws.ACCOUNT_ID}`,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+      autoDeleteObjects: true,
+      // ALB 로그를 위한 ACL 설정
+      objectOwnership: s3.ObjectOwnership.BUCKET_OWNER_PREFERRED,
+      // 90일 후 로그 자동 삭제
+      lifecycleRules: [
+        {
+          id: 'DeleteOldLogs',
+          expiration: cdk.Duration.days(90),
+          enabled: true,
+        },
+      ],
+      // 암호화 설정
+      encryption: s3.BucketEncryption.S3_MANAGED,
+      // 퍼블릭 액세스 차단
+      blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
     });
 
     // ==========================================================================
@@ -103,6 +127,11 @@ export class StockAppStack extends cdk.Stack {
       securityGroup: albSg,
     });
 
+    // ==========================================================================
+    // ALB 액세스 로그 활성화
+    // ==========================================================================
+    alb.logAccessLogs(logBucket, 'alb-logs');
+
     // Target Group
     const targetGroup = new elbv2.ApplicationTargetGroup(this, 'StockAppTargetGroup', {
       vpc,
@@ -155,6 +184,13 @@ export class StockAppStack extends cdk.Stack {
         cachePolicy: cloudfront.CachePolicy.CACHING_DISABLED,
         originRequestPolicy: cloudfront.OriginRequestPolicy.ALL_VIEWER,
       },
+      // ==========================================================================
+      // CloudFront 액세스 로그 활성화
+      // ==========================================================================
+      enableLogging: true,
+      logBucket: logBucket,
+      logFilePrefix: 'cloudfront-logs/',
+      logIncludesCookies: true,
     });
 
     // Outputs
@@ -166,6 +202,11 @@ export class StockAppStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'AlbDnsName', {
       value: alb.loadBalancerDnsName,
       description: 'ALB DNS Name',
+    });
+
+    new cdk.CfnOutput(this, 'LogBucketName', {
+      value: logBucket.bucketName,
+      description: 'S3 Bucket for ALB and CloudFront access logs',
     });
   }
 }

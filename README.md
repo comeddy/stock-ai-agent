@@ -5,7 +5,7 @@
 ![AWS](https://img.shields.io/badge/AWS-Kiro_CLI-232F3E?logo=amazon-aws&logoColor=white)
 ![Streamlit](https://img.shields.io/badge/Streamlit-1.0+-FF4B4B?logo=streamlit&logoColor=white)
 
-Strands Agents SDK와 Amazon Bedrock Claude 모델을 사용한 주식 정보 조회, 분석, 예측 Agent 서비스입니다.
+Strands Agents SDK와 Amazon Bedrock Claude 모델을 사용한 주식 정보 조회, 분석, 예측 Agent 입니다.
 
 ## 🎬 데모 영상
 
@@ -51,7 +51,16 @@ flowchart LR
 ![기술적 분석](images/fig3.png)
 
 ## 기능
-
+ 
+  1. 💰 현재가 조회 → 주가 데이터 수집
+  2. 📊 기술적 분석 → RSI, MACD, 볼린저밴드 계산
+  3. 💼 펀더멘털 분석 → P/E, ROE, 재무비율 분석
+  4. 🏛️ 기관 보유 현황 → 주요 투자자 데이터 수집
+  5. 🏆 동종업계 비교 → 경쟁사 지표 비교
+  6. 🌍 거시경제 지표 → 금리, 환율, VIX 분석
+  7. 📰 뉴스 감성 분석 → 최신 뉴스 NLP 분석
+  8. 🤖 AI 종합 판단 → Claude AI 분석 진행
+<!-- 
 - 실시간 주식 현재가 조회
 - 전일 대비 변동률 계산
 - **주가 추이 분석**
@@ -66,7 +75,7 @@ flowchart LR
   - Google News에서 최근 뉴스 수집
   - AI 기반 긍정/부정/중립 판단
   - 주가 영향도 평가
-- 한글로 친절한 응답 제공
+- 한글로 친절한 응답 제공 -->
 
 ## 기술 스택
 

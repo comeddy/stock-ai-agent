@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-주식 정보 AI Agent - Streamlit 웹 애플리케이션
+주식 분석 Agent AI 서비스 - Streamlit 웹 애플리케이션
 
 이 애플리케이션은 다음 기능을 제공합니다:
 - 실시간 주가 조회 및 차트 시각화
@@ -50,7 +50,7 @@ from strands.models import BedrockModel      # Bedrock 모델 래퍼
 # Streamlit 페이지 설정
 # =============================================================================
 st.set_page_config(
-    page_title="주식 정보 AI Agent",  # 브라우저 탭 제목
+    page_title="주식 분석 Agent AI 서비스",  # 브라우저 탭 제목
     page_icon="📊",                    # 파비콘
     layout="wide"                      # 넓은 레이아웃 사용
 )
@@ -1179,6 +1179,49 @@ if (analyze_button or st.session_state.get('auto_analyze')) and user_input:
             st.markdown("---")
             st.subheader("🤖 AI 종합 분석")
 
+            # ---------------------------------------------------------
+            # 분석 진행 상황을 실시간으로 표시
+            # 사용자가 기다리는 동안 지루하지 않도록 UI 개선
+            # ---------------------------------------------------------
+            import time
+            import random
+
+            # 투자 팁 목록 (대기 중 표시)
+            investment_tips = [
+                "💡 분산 투자는 리스크를 줄이는 가장 기본적인 방법입니다.",
+                "💡 장기 투자는 단기 변동성을 극복하는 좋은 전략입니다.",
+                "💡 투자 전 기업의 재무제표를 확인하는 습관을 들이세요.",
+                "💡 감정적 매매는 손실의 주요 원인입니다.",
+                "💡 RSI 30 이하는 과매도, 70 이상은 과매수 구간입니다.",
+                "💡 골든크로스는 단기 이평선이 장기 이평선을 상향 돌파할 때 발생합니다.",
+                "💡 PER이 낮다고 무조건 저평가는 아닙니다. 업종 평균과 비교하세요.",
+                "💡 기관 투자자의 매수는 긍정적 신호로 해석될 수 있습니다.",
+                "💡 VIX 지수가 30 이상이면 시장이 극도로 불안한 상태입니다.",
+                "💡 환율 변동은 수출 기업의 실적에 큰 영향을 미칩니다.",
+            ]
+
+            # 분석 단계 정의
+            analysis_steps = [
+                ("💰 현재가 조회 중...", "주가 데이터 수집"),
+                ("📊 기술적 분석 중...", "RSI, MACD, 볼린저밴드 계산"),
+                ("💼 펀더멘털 분석 중...", "P/E, ROE, 재무비율 분석"),
+                ("🏛️ 기관 보유 현황 확인 중...", "주요 투자자 데이터 수집"),
+                ("🏆 동종업계 비교 중...", "경쟁사 지표 비교"),
+                ("🌍 거시경제 지표 확인 중...", "금리, 환율, VIX 분석"),
+                ("📰 뉴스 감성 분석 중...", "최신 뉴스 NLP 분석"),
+                ("🤖 AI가 종합 판단 중...", "Claude AI 분석 진행"),
+            ]
+
+            # 진행 상태 컨테이너 생성
+            progress_container = st.container()
+            with progress_container:
+                progress_bar = st.progress(0)
+                status_text = st.empty()
+                tip_text = st.empty()
+
+                # 랜덤 팁 표시
+                tip_text.info(random.choice(investment_tips))
+
             # AI 에이전트 인스턴스 생성
             # 7개 도구를 모두 활용하여 종합 분석 수행
             agent = Agent(
@@ -1195,9 +1238,83 @@ if (analyze_button or st.session_state.get('auto_analyze')) and user_input:
                 system_prompt=st.session_state.system_prompt
             )
 
-            # AI 에이전트 실행 및 응답 표시
-            response = agent(user_input)
-            st.markdown(str(response))
+            # 진행 상황 시뮬레이션과 함께 AI 분석 실행
+            # (실제 진행 상황과 동기화하기 어려우므로 예상 시간 기반 표시)
+            import threading
+            import queue
+
+            result_queue = queue.Queue()
+
+            def run_agent():
+                try:
+                    result = agent(user_input)
+                    result_queue.put(("success", result))
+                except Exception as e:
+                    result_queue.put(("error", str(e)))
+
+            # 백그라운드에서 AI 분석 실행
+            agent_thread = threading.Thread(target=run_agent)
+            agent_thread.start()
+
+            # 진행 상황 애니메이션 표시
+            step_idx = 0
+            while agent_thread.is_alive():
+                if step_idx < len(analysis_steps):
+                    step_name, step_desc = analysis_steps[step_idx]
+                    progress = (step_idx + 1) / len(analysis_steps)
+                    progress_bar.progress(progress)
+                    status_text.markdown(f"**{step_name}** _{step_desc}_")
+
+                    # 3초마다 팁 변경
+                    if step_idx % 2 == 0:
+                        tip_text.info(random.choice(investment_tips))
+
+                    step_idx += 1
+                time.sleep(2.5)  # 각 단계 사이 대기
+
+            # 완료 표시
+            progress_bar.progress(1.0)
+            status_text.markdown("**✅ 분석 완료!**")
+            tip_text.empty()
+
+            # 결과 가져오기
+            status, result = result_queue.get()
+            if status == "error":
+                st.error(f"분석 중 오류 발생: {result}")
+                response = ""
+            else:
+                response = result
+
+            # 진행 상태 컨테이너 정리
+            time.sleep(0.5)
+            progress_container.empty()
+
+            response_text = str(response)
+
+            # ---------------------------------------------------------
+            # 종합 판단 요약 카드 (상단에 핵심 결론 강조)
+            # ---------------------------------------------------------
+            # 종합 판단 추출 (매수/매도/관망)
+            if "매수 고려" in response_text or "매수 추천" in response_text:
+                verdict = "📈 매수 고려"
+                verdict_color = "green"
+                st.success(f"### {verdict}")
+            elif "매도 고려" in response_text or "매도 추천" in response_text:
+                verdict = "📉 매도 고려"
+                verdict_color = "red"
+                st.error(f"### {verdict}")
+            else:
+                verdict = "⏸️ 관망 추천"
+                verdict_color = "blue"
+                st.info(f"### {verdict}")
+
+            # ---------------------------------------------------------
+            # 분석 결과를 시각적으로 구분된 섹션으로 표시
+            # ---------------------------------------------------------
+            with st.container():
+                # 상세 분석 내용을 확장 가능한 패널로 표시
+                with st.expander("📋 상세 분석 보기", expanded=True):
+                    st.markdown(response_text)
 
             # 조회 히스토리에 저장 (최근 검색 기록 유지)
             st.session_state.history.append({
