@@ -1209,7 +1209,7 @@ if (analyze_button or st.session_state.get('auto_analyze')) and user_input:
                 ("🏆 동종업계 비교 중...", "경쟁사 지표 비교"),
                 ("🌍 거시경제 지표 확인 중...", "금리, 환율, VIX 분석"),
                 ("📰 뉴스 감성 분석 중...", "최신 뉴스 NLP 분석"),
-                ("🤖 AI가 종합 판단 중...", "Claude AI 분석 진행"),
+                ("🤖 AI가 종합 판단 중...", "AI 분석 진행"),
             ]
 
             # 진행 상태 컨테이너 생성
