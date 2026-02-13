@@ -21,23 +21,23 @@ Strands Agents SDK와 Amazon Bedrock Claude 모델을 사용한 주식 정보 �
 ```mermaid
 flowchart LR
     subgraph AWS Cloud
-        S3[🪣 S3<br/>Code Deploy]
+        ECR[📦 ECR<br/>Container Registry]
         CF[🌐 CloudFront<br/>HTTPS]
         ALB[⚖️ ALB<br/>HTTP:80]
-        EC2[💻 EC2 t3.medium<br/>Streamlit App]
+        ECS[🐳 ECS Fargate<br/>Streamlit App]
         Bedrock[🤖 Bedrock<br/>Claude 3.5]
     end
 
     User[👤 사용자] --> CF
     CF --> ALB
-    ALB --> EC2
-    EC2 <--> |API Calls| Bedrock
-    S3 -.-> |Download| EC2
+    ALB --> ECS
+    ECS <--> |API Calls| Bedrock
+    ECR -.-> |Pull Image| ECS
 ```
 
 </details>
 
-**배포 구조**: User → CloudFront (HTTPS) → ALB (HTTP:80) → EC2 (Streamlit) → Bedrock Claude 3.5
+**배포 구조**: User → CloudFront (HTTPS) → ALB (HTTP:80) → ECS Fargate (Streamlit) → Bedrock Claude 3.5
 
 ## 📸 스크린샷
 
@@ -75,7 +75,7 @@ flowchart LR
 | AI Model | Amazon Bedrock Claude 3.5 Sonnet |
 | Frontend | Streamlit, Plotly |
 | Data | yfinance, Google News RSS |
-| Infrastructure | AWS CDK (CloudFront, ALB, EC2, S3) |
+| Infrastructure | AWS CDK (CloudFront, ALB, ECS Fargate, ECR) |
 | Security | CloudFront Prefix List, Secret Header 검증 |
 | Logging | ALB/CloudFront Access Logs → S3 |
 
@@ -125,29 +125,62 @@ python stock_agent.py
 
 브라우저가 자동으로 열리며 `http://localhost:8501`에서 접속 가능합니다.
 
-## AWS 배포 (CDK)
+## AWS 배포
+
+### 인프라 배포 (CDK)
 
 ```bash
-# CDK 디렉토리로 이동
 cd cdk
-
-# 의존성 설치
 npm install
 
 # AWS 계정 부트스트랩 (최초 1회)
-npx cdk bootstrap
+npx cdk bootstrap aws://<ACCOUNT_ID>/us-east-1
 
-# 배포
+# 인프라 배포
+export CDK_DEFAULT_ACCOUNT=<ACCOUNT_ID>
 npx cdk deploy
 ```
 
+### 앱 배포 (Docker → ECR → ECS)
+
+```bash
+# 배포 스크립트 실행 (빌드 + push + 서비스 업데이트)
+./deploy.sh
+
+# 특정 태그로 배포
+./deploy.sh v1.0.0
+```
+
+배포 스크립트가 자동으로 수행하는 작업:
+1. ECR 로그인
+2. Docker 이미지 빌드
+3. ECR에 이미지 Push
+4. ECS 서비스 강제 재배포
+
 배포 완료 후 출력되는 **CloudFront URL**로 접속할 수 있습니다.
 
-### 🔒 보안 구성
-- EC2: Private Subnet에 배치 (직접 접근 불가)
+### 배포 모니터링
+
+```bash
+# ECS 서비스 상태 확인
+aws ecs describe-services --region us-east-1 \
+  --cluster stock-app-cluster --services <SERVICE_NAME> \
+  --query 'services[0].deployments'
+
+# 컨테이너 로그 확인
+aws logs tail /ecs/stock-app --region us-east-1 --follow
+
+# 컨테이너 내부 디버깅 (ECS Exec)
+aws ecs execute-command --region us-east-1 \
+  --cluster stock-app-cluster --task <TASK_ID> \
+  --container stock-app --interactive --command "/bin/bash"
+```
+
+### 보안 구성
+- ECS Fargate: Private Subnet에서 실행 (직접 접근 불가)
 - ALB: CloudFront Managed Prefix List로 CloudFront IP만 허용
 - Origin 검증: X-Origin-Verify 비밀 헤더로 직접 ALB 접근 차단
-- 로깅: ALB/CloudFront 액세스 로그 → S3 (90일 보관)
+- 로깅: ALB/CloudFront 액세스 로그 → S3 (90일 보관), 컨테이너 로그 → CloudWatch (30일 보관)
 
 ## 사용 예시
 
@@ -211,13 +244,16 @@ npx cdk deploy
 .
 ├── app.py              # Streamlit UI (메인 애플리케이션)
 ├── stock_agent.py      # AI Agent 도구 정의
+├── Dockerfile          # 컨테이너 이미지 정의
+├── .dockerignore       # Docker 빌드 제외 파일
+├── deploy.sh           # ECR 빌드/Push/배포 스크립트
 ├── run_app.sh          # 로컬 실행 스크립트
 ├── requirements.txt    # Python 패키지 의존성
 ├── cdk/                # AWS CDK 인프라 코드
 │   ├── lib/
-│   │   └── stock-app-stack.ts  # CloudFront, ALB, EC2, S3 설정
+│   │   └── stock-app-stack.ts  # CloudFront, ALB, ECS Fargate, ECR 설정
 │   └── bin/
-│       └── stock-app.ts
+│       └── app.ts
 ├── images/             # 스크린샷 및 아키텍처 이미지
 └── README.md
 ```
